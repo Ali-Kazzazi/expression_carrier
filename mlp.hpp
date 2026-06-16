@@ -66,6 +66,13 @@ public:
           bias = std::make_shared<EXIER>(0.0f);
      }
 
+     std::vector<std::shared_ptr<EXIER>> parameters()
+     {
+          std::vector<std::shared_ptr<EXIER>> params = weights;
+          params.push_back(bias);
+          return params;
+     }
+
      std::shared_ptr<EXIER> operator()(std::vector<std::shared_ptr<EXIER>> &x)
      {
           assert(weights.size() == x.size());
@@ -92,6 +99,15 @@ public:
      {
           for (int i = 0; i < num_output; ++i)
                neurons.push_back(std::make_shared<Neuron>(num_input, act));
+     }
+
+     std::vector<std::shared_ptr<EXIER>> parameters()
+     {
+          std::vector<std::shared_ptr<EXIER>> params;
+          for (auto &n : neurons)
+               for (auto &p : n->parameters())
+                    params.push_back(p);
+          return params;
      }
 
      std::vector<std::shared_ptr<EXIER>> operator()(std::vector<std::shared_ptr<EXIER>> &x)
@@ -125,6 +141,15 @@ public:
 
           for (size_t i = 0; i < all_layers.size() - 1; i++)
                layers.push_back(std::make_shared<Layer>(all_layers[i], all_layers[i + 1], activations[i]));
+     }
+
+     std::vector<std::shared_ptr<EXIER>> parameters()
+     {
+          std::vector<std::shared_ptr<EXIER>> params;
+          for (auto &l : layers)
+               for (auto &p : l->parameters())
+                    params.push_back(p);
+          return params;
      }
 
      std::vector<std::shared_ptr<EXIER>> operator()(std::vector<std::shared_ptr<EXIER>> &x)

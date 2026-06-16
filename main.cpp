@@ -35,19 +35,42 @@ int main()
 		std::make_shared<EXIER>(1.0f),
 	};
 
-	std::vector<std::shared_ptr<EXIER>> ypred = {};
-
-	auto loss = std::make_shared<EXIER>(0.0f);
-
-	for (size_t i = 0; i < xs.size(); i++)
+	for (int epoch = 1; epoch <= 100; epoch++)
 	{
-		auto ypred = model2(xs[i]);
+		// Zero gradients
+		for (auto &p : model2.parameters())
+		{
+			p->grad = 0.0f;
+		}
 
-		loss = loss + (ys[i] - ypred[0])->pow(2);
+		auto loss = std::make_shared<EXIER>(0.0f);
+
+		// Forward pass
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			auto pred = model2(xs[i]);
+
+			auto diff = ys[i] - pred[0];
+			loss = loss + diff->pow(2);
+		}
+
+		// Backward pass
+		loss->backward();
+
+		// std::cout << "grad[0] = "
+        //   << model2.parameters()[0]->grad
+        //   << std::endl;
+
+		// Gradient descent step
+		for (auto &p : model2.parameters())
+		{
+			p->data -= 0.005f * p->grad;
+		}
+
+		std::cout << "epoch " << epoch
+				  << " loss = " << loss->data
+				  << std::endl;
 	}
-
-	std::cout << "loss " << loss->data << std::endl;
-	print(loss);
 
 	return 0;
 }

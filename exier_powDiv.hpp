@@ -42,6 +42,8 @@ public:
 
 		buildTopo(shared_from_this().get());
 
+		grad = 1.0f;
+		
 		std::reverse(topo.begin(), topo.end());
 		
 		for (auto node : topo)
