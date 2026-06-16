@@ -1,0 +1,227 @@
+<style>
+  html,
+  body {
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+    background: #000;
+    color: #fff;
+  }
+
+  body {
+    font-family: system-ui, sans-serif;
+  }
+
+  #drop-zone {
+    border: 1.5px dashed rgba(255, 255, 255, 0.35);
+    border-radius: 1rem;
+    padding: 2rem;
+    text-align: center;
+    color: #ddd;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  #drop-zone.drag {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  #json-input {
+    width: 100%;
+    height: 120px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 12px;
+    border: 0.5px solid rgba(255, 255, 255, 0.18);
+    border-radius: 0.5rem;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    resize: vertical;
+    box-sizing: border-box;
+    margin-top: 10px;
+  }
+
+  #graph-canvas {
+    width: 100%;
+    overflow: auto;
+    margin-top: 1.5rem;
+  }
+
+  svg text {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .node-leaf rect {
+    fill: #223533;
+    stroke: #5DCAA5;
+  }
+
+  .node-leaf text {
+    fill: #9FE1CB;
+  }
+
+  .node-op rect {
+    fill: #2B2A4C;
+    stroke: #AFA9EC;
+  }
+
+  .node-op text {
+    fill: #CECBF6;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .node-leaf rect {
+      fill: #085041;
+      stroke: #5DCAA5;
+    }
+
+    .node-leaf text {
+      fill: #9FE1CB;
+    }
+
+    .node-op rect {
+      fill: #3C3489;
+      stroke: #AFA9EC;
+    }
+
+    .node-op text {
+      fill: #CECBF6;
+    }
+  }
+
+  .edge {
+    stroke: rgba(255, 255, 255, 0.55);
+    stroke-width: 1.5;
+    fill: none;
+    marker-end: url(#arrow);
+  }
+</style>
+
+<h2 class="sr-only">EXIER computation graph visualizer — paste JSON output from your C++ program to render the node
+  graph</h2>
+
+<div id="drop-zone">
+  <i class="ti ti-file-code" style="font-size:24px; display:block; margin-bottom:8px;" aria-hidden="true"></i>
+  Paste your JSON here or drag a <code>graph.json</code> file
+  <textarea id="json-input" placeholder='{"id":"...","grad": 0, "data":...,"op":"...","prev":[...]}'></textarea>
+  <button onclick="renderFromInput()" style="margin-top:10px;">Render graph ↗</button>
+</div>
+
+<div id="graph-canvas"></div>
+
+<script>
+  const dropZone = document.getElementById('drop-zone');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = ev => { document.getElementById('json-input').value = ev.target.result; renderFromInput(); };
+    r.readAsText(file);
+  });
+
+  function renderFromInput() {
+    try {
+      const json = JSON.parse(document.getElementById('json-input').value.trim());
+      renderGraph(json);
+    } catch (e) {
+      alert('Invalid JSON: ' + e.message);
+    }
+  }
+
+  function collectNodes(node, nodes = new Map(), edges = []) {
+    if (nodes.has(node.id)) return { nodes, edges };
+    nodes.set(node.id, node);
+    for (const child of (node.prev || [])) {
+      edges.push({ from: child.id, to: node.id });
+      collectNodes(child, nodes, edges);
+    }
+    return { nodes, edges };
+  }
+
+  function assignLevels(root, nodes) {
+    const levels = new Map();
+    function dfs(id, depth) {
+      levels.set(id, Math.max(levels.get(id) || 0, depth));
+      const node = nodes.get(id);
+      for (const child of (node.prev || [])) dfs(child.id, depth + 1);
+    }
+    dfs(root.id, 0);
+    const maxD = Math.max(...levels.values());
+    levels.forEach((v, k) => levels.set(k, maxD - v));
+    return levels;
+  }
+
+  function renderGraph(root) {
+    const { nodes, edges } = collectNodes(root);
+    const levels = assignLevels(root, nodes);
+
+    const byLevel = new Map();
+    levels.forEach((lvl, id) => {
+      if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+      byLevel.get(lvl).push(id);
+    });
+
+    const NODE_W = 130, NODE_H = 60, H_GAP = 40, V_GAP = 60;
+    const maxInLevel = Math.max(...[...byLevel.values()].map(a => a.length));
+    const totalLevels = Math.max(...levels.values()) + 1;
+    const svgW = Math.max(500, maxInLevel * (NODE_W + H_GAP) + H_GAP);
+    const svgH = totalLevels * (NODE_H + V_GAP) + V_GAP;
+
+    const pos = new Map();
+    byLevel.forEach((ids, lvl) => {
+      const totalW = ids.length * (NODE_W + H_GAP) - H_GAP;
+      const startX = (svgW - totalW) / 2;
+      ids.forEach((id, i) => {
+        pos.set(id, { x: startX + i * (NODE_W + H_GAP), y: lvl * (NODE_H + V_GAP) + V_GAP / 2 });
+      });
+    });
+
+    const isLeaf = id => (nodes.get(id).prev || []).length === 0;
+
+    let edgeSVG = '';
+    for (const { from, to } of edges) {
+      const f = pos.get(from), t = pos.get(to);
+      if (!f || !t) continue;
+      const x1 = f.x + NODE_W / 2, y1 = f.y + NODE_H;
+      const x2 = t.x + NODE_W / 2, y2 = t.y;
+      const cy = (y1 + y2) / 2;
+      edgeSVG += `<path class="edge" d="M${x1},${y1} C${x1},${cy} ${x2},${cy} ${x2},${y2}"/>`;
+    }
+
+    let nodeSVG = '';
+    nodes.forEach((node, id) => {
+      const p = pos.get(id);
+      if (!p) return;
+      const cls = isLeaf(id) ? 'node-leaf' : 'node-op';
+      const op = node.op;
+      const val = parseFloat(node.data).toFixed(4);
+      const grad = parseFloat(node.grad).toFixed(4);
+      nodeSVG += `
+      <g class="${cls}" transform="translate(${p.x},${p.y})">
+        <rect width="${NODE_W}" height="${NODE_H}" rx="8" stroke-width="1.5"/>
+        <text x="${NODE_W / 2}" y="15" text-anchor="middle" font-size="13" font-weight="500">op: ${op}</text>
+        <text x="${NODE_W / 2}" y="30" text-anchor="middle" font-size="13" font-weight="500">data: ${val}</text>
+        <text x="${NODE_W / 2}" y="45" text-anchor="middle" font-size="13" font-weight="500">grad: ${grad}</text>
+      </g>`;
+    });
+
+    document.getElementById('graph-canvas').innerHTML = `
+    <svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="var(--color-border-secondary)"/>
+        </marker>
+      </defs>
+      ${edgeSVG}
+      ${nodeSVG}
+    </svg>`;
+  }
+
+  const sample = { "id": "1", "grad": 0, "data": -16, "op": "-", "prev": [{ "id": "2", "grad": 0, "data": -6, "op": "*", "prev": [{ "id": "3", "grad": 0, "data": 2, "op": "", "prev": [] }, { "id": "4", "grad": 0, "data": -3, "op": "", "prev": [] }] }, { "id": "5", "grad": 0, "data": 10, "op": "", "prev": [] }] };
+  document.getElementById('json-input').value = JSON.stringify(sample);
+  renderGraph(sample);
+</script>
