@@ -21,12 +21,33 @@ int main()
 
 	auto model2 = MLP(3, {4, 4, 1});
 
-	std::vector<std::shared_ptr<EXIER>> x = {
-		std::make_shared<EXIER>(2.0f),
-		std::make_shared<EXIER>(3.0f),
-		std::make_shared<EXIER>(-1.0f)};
-	auto out = model(x);
-	print(out[0]);
+	std::vector<std::vector<std::shared_ptr<EXIER>>> xs = {
+		{std::make_shared<EXIER>(2.0f), std::make_shared<EXIER>(3.0f), std::make_shared<EXIER>(-1.0f)},
+		{std::make_shared<EXIER>(3.0f), std::make_shared<EXIER>(-1.0f), std::make_shared<EXIER>(0.5f)},
+		{std::make_shared<EXIER>(0.5f), std::make_shared<EXIER>(1.0f), std::make_shared<EXIER>(1.0f)},
+		{std::make_shared<EXIER>(1.0f), std::make_shared<EXIER>(1.0f), std::make_shared<EXIER>(-1.0f)},
+	};
+
+	std::vector<std::shared_ptr<EXIER>> ys = {
+		std::make_shared<EXIER>(1.0f),
+		std::make_shared<EXIER>(-1.0f),
+		std::make_shared<EXIER>(-1.0f),
+		std::make_shared<EXIER>(1.0f),
+	};
+
+	std::vector<std::shared_ptr<EXIER>> ypred = {};
+
+	auto loss = std::make_shared<EXIER>(0.0f);
+
+	for (size_t i = 0; i < xs.size(); i++)
+	{
+		auto ypred = model2(xs[i]);
+
+		loss = loss + (ys[i] - ypred[0])->pow(2);
+	}
+
+	std::cout << "loss " << loss->data << std::endl;
+	print(loss);
 
 	return 0;
 }
