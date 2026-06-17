@@ -42,7 +42,7 @@ public:
 
 		buildTopo(shared_from_this().get());
 
-		grad = 1.0f;
+		grad = 1.0f; // this is the gradiant of the last note which is like the dl/dl = 1
 		
 		std::reverse(topo.begin(), topo.end());
 		
