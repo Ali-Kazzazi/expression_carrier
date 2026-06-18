@@ -26,28 +26,28 @@ public:
 
 	void backward()
 	{
-		std::vector<EXIER *> topo;
+		std::vector<std::shared_ptr<EXIER>> topo;
 		std::set<EXIER *> visited;
 
-		std::function<void(EXIER *)> buildTopo = [&](EXIER *v)
+		std::function<void(std::shared_ptr<EXIER>)> buildTopo = [&](std::shared_ptr<EXIER> v)
 		{
-			if (visited.count(v) == 0)
+			if (visited.count(v.get()) == 0)
 			{
-				visited.insert(v);
-				for (auto child : v->prev)
-					buildTopo(child.get());
+				visited.insert(v.get());
+				for (auto &child : v->prev)
+					buildTopo(child);
 				topo.push_back(v);
 			}
 		};
 
-		buildTopo(shared_from_this().get());
-
-		grad = 1.0f; // this is the gradiant of the last note which is like the dl/dl = 1
-		
+		buildTopo(shared_from_this());
+		grad = 1.0f;
 		std::reverse(topo.begin(), topo.end());
-		
-		for (auto node : topo)
+
+		for (auto &node : topo)
 			node->_backward();
+
+		topo.clear();
 	}
 
 	// std::string print()
@@ -106,8 +106,11 @@ public:
 		auto prev = std::vector<std::shared_ptr<EXIER>>{shared_from_this(), other};
 		auto out = std::make_shared<EXIER>(data + other->data, prev, "+");
 
-		out->_backward = [out, self = shared_from_this(), other]()
+		out->_backward = [weak_out = std::weak_ptr<EXIER>(out), self = shared_from_this(), other]()
 		{
+			auto out = weak_out.lock();
+			if (!out)
+				return;
 			self->grad += out->grad;
 			other->grad += out->grad;
 		};
@@ -120,8 +123,11 @@ public:
 		auto prev = std::vector<std::shared_ptr<EXIER>>{shared_from_this(), other};
 		auto out = std::make_shared<EXIER>(data - other->data, prev, "-");
 
-		out->_backward = [out, self = shared_from_this(), other]()
+		out->_backward = [weak_out = std::weak_ptr<EXIER>(out), self = shared_from_this(), other]()
 		{
+			auto out = weak_out.lock();
+			if (!out)
+				return;
 			self->grad += out->grad;
 			other->grad -= out->grad;
 		};
@@ -134,8 +140,11 @@ public:
 		auto prev = std::vector<std::shared_ptr<EXIER>>{shared_from_this(), other};
 		auto out = std::make_shared<EXIER>(data * other->data, prev, "*");
 
-		out->_backward = [out, self = shared_from_this(), other]()
+		out->_backward = [weak_out = std::weak_ptr<EXIER>(out), self = shared_from_this(), other]()
 		{
+			auto out = weak_out.lock();
+			if (!out)
+				return;
 			self->grad += other->data * out->grad;
 			other->grad += self->data * out->grad;
 		};
@@ -155,8 +164,11 @@ public:
 		auto prev = std::vector<std::shared_ptr<EXIER>>{shared_from_this(), other};
 		auto out = std::make_shared<EXIER>(std::powf(data, other->data), prev, "**" + std::to_string(other->data));
 
-		out->_backward = [out, self = shared_from_this(), other]()
+		out->_backward = [weak_out = std::weak_ptr<EXIER>(out), self = shared_from_this(), other]()
 		{
+			auto out = weak_out.lock();
+			if (!out)
+				return;
 			self->grad += other->data * std::powf(self->data, other->data - 1) * out->grad;
 			other->grad += std::logf(self->data) * std::powf(self->data, other->data) * out->grad;
 		};
@@ -169,8 +181,11 @@ public:
 		auto prev = std::vector<std::shared_ptr<EXIER>>{shared_from_this()};
 		auto out = std::make_shared<EXIER>(std::powf(data, other), prev, "**" + std::to_string(other));
 
-		out->_backward = [out, self = shared_from_this(), other]()
+		out->_backward = [weak_out = std::weak_ptr<EXIER>(out), self = shared_from_this(), other]()
 		{
+			auto out = weak_out.lock();
+			if (!out)
+				return;
 			self->grad += other * std::powf(self->data, other - 1) * out->grad;
 			// other is a constant, so it doesn't receive gradient
 		};
@@ -184,8 +199,11 @@ public:
 		float t = (std::exp(2 * x) - 1) / (std::exp(2 * x) + 1); // tanh(x) = (e^(2x) - 1) / (e^(2x) + 1)
 		auto prev = std::vector<std::shared_ptr<EXIER>>{shared_from_this()};
 		auto out = std::make_shared<EXIER>(t, prev, "tanh");
-		out->_backward = [out, self = shared_from_this()]()
+		out->_backward = [weak_out = std::weak_ptr<EXIER>(out), self = shared_from_this()]()
 		{
+			auto out = weak_out.lock();
+			if (!out)
+				return;
 			float t = out->data;
 			self->grad += (1 - std::powf(t, 2)) * out->grad;
 		};
@@ -198,9 +216,26 @@ public:
 		float e = std::expf(x);
 		auto prev = std::vector<std::shared_ptr<EXIER>>{shared_from_this()};
 		auto out = std::make_shared<EXIER>(e, prev, "exp");
-		out->_backward = [out, self = shared_from_this()]()
+		out->_backward = [weak_out = std::weak_ptr<EXIER>(out), self = shared_from_this()]()
 		{
+			auto out = weak_out.lock();
+			if (!out)
+				return;
 			self->grad += out->data * out->grad; // since out->data is e^x
+		};
+		return out;
+	}
+
+	std::shared_ptr<EXIER> log()
+	{
+		auto prev = std::vector<std::shared_ptr<EXIER>>{shared_from_this()};
+		auto out = std::make_shared<EXIER>(std::logf(data), prev, "log");
+		out->_backward = [weak_out = std::weak_ptr<EXIER>(out), self = shared_from_this()]()
+		{
+			auto out = weak_out.lock();
+			if (!out)
+				return;
+			self->grad += (1.0f / self->data) * out->grad;
 		};
 		return out;
 	}
@@ -211,8 +246,11 @@ inline std::shared_ptr<EXIER> operator+(const std::shared_ptr<EXIER> &lhs, const
 {
 	auto out = std::make_shared<EXIER>(lhs->data + rhs->data,
 									   std::vector<std::shared_ptr<EXIER>>{lhs, rhs}, "+");
-	out->_backward = [out, lhs, rhs]()
+	out->_backward = [weak_out = std::weak_ptr<EXIER>(out), lhs, rhs]()
 	{
+		auto out = weak_out.lock();
+		if (!out)
+			return;
 		lhs->grad += out->grad;
 		rhs->grad += out->grad;
 	};
@@ -224,8 +262,11 @@ inline std::shared_ptr<EXIER> operator-(const std::shared_ptr<EXIER> &lhs, const
 {
 	auto out = std::make_shared<EXIER>(lhs->data - rhs->data,
 									   std::vector<std::shared_ptr<EXIER>>{lhs, rhs}, "-");
-	out->_backward = [out, lhs, rhs]()
+	out->_backward = [weak_out = std::weak_ptr<EXIER>(out), lhs, rhs]()
 	{
+		auto out = weak_out.lock();
+		if (!out)
+			return;
 		lhs->grad += out->grad;
 		rhs->grad -= out->grad;
 	};
@@ -237,8 +278,11 @@ inline std::shared_ptr<EXIER> operator*(const std::shared_ptr<EXIER> &lhs, const
 	float lhs_data = lhs->data, rhs_data = rhs->data;
 	auto out = std::make_shared<EXIER>(lhs_data * rhs_data,
 									   std::vector<std::shared_ptr<EXIER>>{lhs, rhs}, "*");
-	out->_backward = [out, lhs, rhs, lhs_data, rhs_data]()
+	out->_backward = [weak_out = std::weak_ptr<EXIER>(out), lhs, rhs, lhs_data, rhs_data]()
 	{
+		auto out = weak_out.lock();
+		if (!out)
+			return;
 		lhs->grad += rhs_data * out->grad;
 		rhs->grad += lhs_data * out->grad;
 	};
@@ -264,8 +308,11 @@ inline std::shared_ptr<EXIER> pow(const std::shared_ptr<EXIER> &base, const std:
 {
 	auto out = std::make_shared<EXIER>(std::powf(base->data, exponent->data),
 									   std::vector<std::shared_ptr<EXIER>>{base, exponent}, "**");
-	out->_backward = [out, base, exponent]()
+	out->_backward = [weak_out = std::weak_ptr<EXIER>(out), base, exponent]()
 	{
+		auto out = weak_out.lock();
+		if (!out)
+			return;
 		base->grad += exponent->data * std::powf(base->data, exponent->data - 1) * out->grad;
 		exponent->grad += std::logf(base->data) * std::powf(base->data, exponent->data) * out->grad;
 	};
@@ -275,8 +322,11 @@ inline std::shared_ptr<EXIER> pow(const std::shared_ptr<EXIER> &base, const std:
 inline std::shared_ptr<EXIER> tanh(const std::shared_ptr<EXIER> &x)
 {
 	auto out = std::make_shared<EXIER>(std::tanhf(x->data), std::vector<std::shared_ptr<EXIER>>{x}, "tanh");
-	out->_backward = [out, x]()
+	out->_backward = [weak_out = std::weak_ptr<EXIER>(out), x]()
 	{
+		auto out = weak_out.lock();
+		if (!out)
+			return;
 		float t = out->data;
 		x->grad += (1 - std::powf(t, 2)) * out->grad;
 	};
@@ -286,10 +336,39 @@ inline std::shared_ptr<EXIER> tanh(const std::shared_ptr<EXIER> &x)
 inline std::shared_ptr<EXIER> exp(const std::shared_ptr<EXIER> &x)
 {
 	auto out = std::make_shared<EXIER>(std::expf(x->data), std::vector<std::shared_ptr<EXIER>>{x}, "exp");
-	out->_backward = [out, x]()
+	out->_backward = [weak_out = std::weak_ptr<EXIER>(out), x]()
 	{
+		auto out = weak_out.lock();
+		if (!out)
+			return;
 		x->grad += out->data * out->grad; // since out->data is e^x
 	};
+	return out;
+}
+
+inline std::vector<std::shared_ptr<EXIER>> softmax(std::vector<std::shared_ptr<EXIER>> &x)
+{
+	// find max for numerical stability
+	float max_val = x[0]->data;
+	for (auto &xi : x)
+		if (xi->data > max_val)
+			max_val = xi->data;
+
+	// exp(x - max)
+	std::vector<std::shared_ptr<EXIER>> exps;
+	for (auto &xi : x)
+		exps.push_back((xi - std::make_shared<EXIER>(max_val))->exp());
+
+	// sum
+	auto sum = std::make_shared<EXIER>(0.0f);
+	for (auto &e : exps)
+		sum = sum + e;
+
+	// divide
+	std::vector<std::shared_ptr<EXIER>> out;
+	for (auto &e : exps)
+		out.push_back(e / sum);
+
 	return out;
 }
 

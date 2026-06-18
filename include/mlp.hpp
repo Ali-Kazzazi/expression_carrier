@@ -8,7 +8,7 @@
 #include <array>
 #include <ctime>
 
-#include "exier_powDiv.hpp"
+#include "exier.hpp"
 
 using Activation = std::function<std::shared_ptr<EXIER>(std::shared_ptr<EXIER>)>;
 
@@ -29,8 +29,11 @@ inline Activation act_relu()
      {
           float val = x->data > 0 ? x->data : 0.0f;
           auto out = std::make_shared<EXIER>(val, std::vector<std::shared_ptr<EXIER>>{x}, "relu");
-          out->_backward = [out, x]()
+          out->_backward = [weak_out = std::weak_ptr<EXIER>(out), x]()
           {
+               auto out = weak_out.lock();
+               if (!out)
+                    return;
                x->grad += (x->data > 0 ? 1.0f : 0.0f) * out->grad;
           };
           return out;
@@ -43,8 +46,11 @@ inline Activation act_sigmoid()
      {
           float val = 1.0f / (1.0f + std::expf(-x->data));
           auto out = std::make_shared<EXIER>(val, std::vector<std::shared_ptr<EXIER>>{x}, "sigmoid");
-          out->_backward = [out, x]()
+          out->_backward = [weak_out = std::weak_ptr<EXIER>(out), x]()
           {
+               auto out = weak_out.lock();
+               if (!out)
+                    return;
                x->grad += out->data * (1.0f - out->data) * out->grad; // sigmoid' = sigmoid * (1 - sigmoid)
           };
           return out;

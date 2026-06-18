@@ -1,7 +1,12 @@
 build/
 .vscode/
+.vs/
+/.vs
+bin/
+/bin
+
 *.ilk
 *.obj
 *.pdb
 *.exe
-/.vs
+

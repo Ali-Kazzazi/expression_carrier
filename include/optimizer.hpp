@@ -2,7 +2,7 @@
 
 #include <iostream>
 #include <vector>
-#include "exier_powDiv.hpp"
+#include "exier.hpp"
 
 class GD
 {
